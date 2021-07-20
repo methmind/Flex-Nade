@@ -83,7 +83,7 @@ function string:split(inSplitPattern, outResults)
 end
 
 local IsChanged = false;
-local cfgVars = { { "misc.duckjump", false }, { "misc.fastduck", false }, { "misc.autothrow", false }, { "misc.strafe.enable", false } };
+local cfgVars = { { "rbot.antiaim.advanced.antialign", 0}, { "misc.duckjump", false }, { "misc.fastduck", false }, { "misc.autothrow", false }, { "misc.strafe.enable", false } };
 local function save_user_cfg()
 	for i = 1, #cfgVars do
 		cfgVars[i][2] = gui.GetValue(cfgVars[i][1]);
@@ -497,7 +497,6 @@ local function move_to_spot(UserCmd)
 	local vecDelta = (Vector3(NadesData[tNade][1], NadesData[tNade][2], 0) - localPosition);
 	local iDistance = vecDelta:Length2D();
 	local IsComplite = false;
-	gui.SetValue("rbot.antiaim.advanced.antialign", 1);
 	
 	if localFlags == 256 then
 		return false;
