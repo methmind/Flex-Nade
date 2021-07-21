@@ -83,7 +83,12 @@ function string:split(inSplitPattern, outResults)
 end
 
 local IsChanged = false;
-local cfgVars = { { "rbot.antiaim.advanced.antialign", 0}, { "misc.duckjump", false }, { "misc.fastduck", false }, { "misc.autothrow", false }, { "misc.strafe.enable", false } };
+local cfgVars = { { "rbot.antiaim.advanced.antialign", 0}, { "misc.duckjump", false }, { "misc.fastduck", false }, { "misc.autothrow", false }, { "misc.strafe.enable", false },
+	{ "rbot.accuracy.weapon.shared.doublefire", 0 }, { "rbot.accuracy.weapon.pistol.doublefire", 0 }, { "rbot.accuracy.weapon.hpistol.doublefire", 0 }, 
+	{ "rbot.accuracy.weapon.smg.doublefire", 0 }, { "rbot.accuracy.weapon.rifle.doublefire", 0 }, { "rbot.accuracy.weapon.shotgun.doublefire", 0 }, 
+	{ "rbot.accuracy.weapon.scout.doublefire", 0 }, { "rbot.accuracy.weapon.asniper.doublefire", 0 }, { "rbot.accuracy.weapon.sniper.doublefire", 0 }, 
+	{ "rbot.accuracy.weapon.lmg.doublefire", 0 } };
+
 local function save_user_cfg()
 	for i = 1, #cfgVars do
 		cfgVars[i][2] = gui.GetValue(cfgVars[i][1]);
