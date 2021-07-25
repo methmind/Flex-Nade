@@ -1,3 +1,5 @@
+-- [^_^]
+
 ffi.cdef[[
 	unsigned long GetFileAttributesA(const char* lpFileName);
 
@@ -11,6 +13,8 @@ ffi.cdef[[
     unsigned long GetFileSize(void* hFile, unsigned long* lpFileSizeHigh);
 
 	bool ReadFile(void* hFile, char* lpBuffer, unsigned long nNumberOfBytesToRead, unsigned long* lpNumberOfBytesRead, int lpOverlapped);
+	
+	bool WriteFile(void* hFile, char* lpBuffer, unsigned long nNumberOfBytesToWrite, unsigned long* lpNumberOfBytesWritten, void* lpOverlapped);
 ]]
 
 local nade_icons_texture = 
@@ -40,9 +44,9 @@ local guiHelperEnable = gui.Checkbox(guiHelperSettingsBlock , "nade_enable", "En
 local guiHelperType = gui.Combobox(guiHelperSettingsBlock, "nade_type", "Helper Type", "Smooth (Legit)", "Silent (Rage)");
 local guiHelperFOV = gui.Slider(guiHelperSettingsBlock, "nade_fov", "Helper FOV", 10, 1, 360);
 local guiHelperSpeed = gui.Slider(guiHelperSettingsBlock, "nade_smooth", "Aim Speed", 75, 1, 100);
-local guiVisualsSettingsBlock = gui.Groupbox(ref, "Visuals Settings", 322, 16, 300, 250);
 local guiHelperRageMode = gui.Checkbox(guiHelperSettingsBlock , "nade_rp", "Load Rage Preset", 0);
 
+local guiVisualsSettingsBlock = gui.Groupbox(ref, "Visuals Settings", 320, 16, 300, 250);
 local guiHelperAnimSpeed = gui.Slider(guiVisualsSettingsBlock, "nade_anim_speed", "Animation Speed", 4, 1, 10);
 local guiHelperVisCheck = gui.Checkbox(guiVisualsSettingsBlock , "nade_vis_check", "Visibility Check", 1);
 local guiHelperInvisTranc = gui.Slider(guiVisualsSettingsBlock, "nade_invs_tranc", "Transparency When Invisible", 50, 15, 100);
@@ -80,6 +84,25 @@ function string:split(inSplitPattern, outResults)
    end
    table.insert( outResults, string.sub( self, theStart ) )
    return outResults
+end
+
+function bool_to_number(value)
+  return value and 1 or 0
+end
+
+function tprint(tbl, indent)
+  if not indent then indent = 0 end
+  for k, v in pairs(tbl) do
+    formatting = string.rep("  ", indent) .. k .. ": "
+    if type(v) == "table" then
+      print(formatting)
+      tprint(v, indent+1)
+    elseif type(v) == 'boolean' then
+      print(formatting .. tostring(v))      
+    else
+      print(formatting .. v)
+    end
+  end
 end
 
 local IsChanged = false;
@@ -789,6 +812,7 @@ end
 
 local savedMap = "";
 local savedPreset = nil;
+local shouldUpdateList = false;
 local function current_map_logger()
 	local currentMap = engine.GetMapName();
 	if currentMap == "" then return; end
@@ -825,7 +849,7 @@ local function current_map_logger()
 			local countofMolly = 0;
 			local countofSmokes = 0;
 			local countofFrags = 0;
-			local hFile = ffi.cast("void*", ffi.C.CreateFileA(filePath, 0xC0000000, 3, 0, 3, 128, nil))
+			local hFile = ffi.cast("void*", ffi.C.CreateFileA(filePath, 0x80000000, 3, 0, 3, 128, nil))
 			if hFile then
 				local fileSize = ffi.C.GetFileSize(hFile, nil);
 				if fileSize > 0 then
@@ -853,6 +877,7 @@ local function current_map_logger()
 				
 				ffi.C.CloseHandle(hFile);
 			end
+			shouldUpdateList = true;
 			print(":::::::::::::::::::::::::::::::::::::: [DATA LOADED] :::::::::::::::::::::::::::::::::::");
 			print("Current map:       "..savedMap);
 			print("Count of Spots:    "..countofSpots);
@@ -871,3 +896,200 @@ callbacks.Register("Draw", grenade_info);
 callbacks.Register("Draw", current_map_logger);
 callbacks.Register("CreateMove", movement_helper);
 callbacks.Register("Unload", on_unload);
+
+-- editor block
+local guiEditorBlock = gui.Groupbox(ref, "Nade Editor", 16, 300, 290, 250);
+local guiNadeList = gui.Listbox(guiEditorBlock, "nade_list", 250);
+local guiNadeSelector = gui.Combobox(guiEditorBlock, "nade_selector", "Selector", "n/a");
+--
+local guiNadeText = nil;
+local guiNadeType = nil;
+local guiShouldRun = nil;
+local guiShouldJump = nil;
+local guiShouldDuck = nil;
+local guiVisDistance = nil;
+local guiTicksSlider = nil;
+local guiMoveSpeed = nil;
+local guiMoveDegrees = nil;
+
+local function update_nade_list()
+	local nameArr = {};
+	for i = 1, #NadesData do
+		for y = 1, #NadesData[i][6] do
+			if y > 1 then
+				nameArr[i] = nameArr[i] ..  " | " .. NadesData[i][6][y];
+			else
+				table.insert(nameArr, NadesData[i][6][y]);
+			end
+		end
+	end
+	guiNadeList:SetOptions(unpack(nameArr));
+end
+
+local function update_nade_combo(index)
+	local nameArr = {};
+	for i = 1, #NadesData[index][6] do
+		table.insert(nameArr, NadesData[index][6][i]);
+	end
+	guiNadeSelector:SetOptions(unpack(nameArr));
+end
+
+local editorNade = nil;
+local editorNadeId = nil;
+local function nade_creator_handler()
+	if not NadesData[1] then return; end
+	
+	if shouldUpdateList then
+		update_nade_list();
+		shouldUpdateList = false;
+		editorNade = nil;
+	end
+	
+	if editorNade ~= guiNadeList:GetValue() + 1 then
+		editorNade = guiNadeList:GetValue() + 1;
+		update_nade_combo(editorNade);
+		
+		editorNadeId = 1;
+		guiTicksSlider:SetValue(NadesData[editorNade][7][editorNadeId][7]);
+		guiMoveSpeed:SetValue(NadesData[editorNade][7][editorNadeId][8]);
+		guiMoveDegrees:SetValue(NadesData[editorNade][7][editorNadeId][9]);
+	end
+	
+	if editorNade then
+		if editorNadeId ~= guiNadeSelector:GetValue() + 1 then
+			editorNadeId = guiNadeSelector:GetValue() + 1;
+		else
+			NadesData[editorNade][7][editorNadeId][7] = guiTicksSlider:GetValue();
+			NadesData[editorNade][7][editorNadeId][8] = guiMoveSpeed:GetValue();
+			NadesData[editorNade][7][editorNadeId][9] = guiMoveDegrees:GetValue();
+		end
+	end
+end
+
+local function teleport_to_nade()
+	if not editorNade then return; end
+	
+	local gNade = editorNade;
+	local tNade = guiNadeSelector:GetValue() + 1;	
+	client.Command("setpos " .. NadesData[gNade][1] .. " " .. NadesData[gNade][2] .. " " .. NadesData[gNade][3]);
+	engine.SetViewAngles(EulerAngles(NadesData[gNade][7][tNade][1], NadesData[gNade][7][tNade][2], 0));
+end
+
+local function set_nade_location()
+	if not editorNade then return; end
+		
+	local gNade = editorNade;
+	local localPlayer = entities.GetLocalPlayer();
+	local localPosition = localPlayer:GetPropVector("m_vecOrigin");
+	
+	if not NadesData[gNade][7][2] then
+		NadesData[gNade][1] = localPosition.x;
+		NadesData[gNade][2] = localPosition.y;
+		NadesData[gNade][3] = localPosition.z;
+	else
+		local tNade = guiNadeSelector:GetValue() + 1;
+		
+		table.insert(NadesData, { localPosition.x, localPosition.y, localPosition.z, 0, NadesData[gNade][5], { NadesData[gNade][6][tNade] },
+		{ { NadesData[gNade][7][tNade][1], NadesData[gNade][7][tNade][2], NadesData[gNade][7][tNade][3], NadesData[gNade][7][tNade][4], NadesData[gNade][7][tNade][5],
+		NadesData[gNade][7][tNade][6], NadesData[gNade][7][tNade][7], NadesData[gNade][7][tNade][8], NadesData[gNade][7][tNade][9] } } });
+		table.remove(NadesData[gNade][6], tNade);
+		table.remove(NadesData[gNade][7], tNade);
+		shouldUpdateList = true;
+		editorNade = nil;
+	end
+end
+
+local function set_nade_view()
+	if not editorNade then return; end
+	
+	local gNade = editorNade;
+	local tNade = editorNadeId;
+	local localViewAngles = engine.GetViewAngles();
+	NadesData[gNade][7][tNade][1] = localViewAngles.pitch;
+	NadesData[gNade][7][tNade][2] = localViewAngles.yaw;	
+end
+
+local function create_new_nade()
+	if not editorNade then return; end
+	
+	local nadeName = guiNadeText:GetValue();
+	if nadeName == "" then nadeName = "Test"; end
+	
+	local localPlayer = entities.GetLocalPlayer();
+	local localPosition = localPlayer:GetPropVector("m_vecOrigin");
+	local localViewAngles = engine.GetViewAngles();
+	local nadeType = guiNadeType:GetValue() + 1;
+	
+	add_new_nade(localPosition.x, localPosition.y, localPosition.z, nadeType, nadeName, localViewAngles.pitch, localViewAngles.yaw, guiVisDistance:GetValue(), 
+	bool_to_number(guiShouldRun:GetValue()), bool_to_number(guiShouldJump:GetValue()), bool_to_number(guiShouldDuck:GetValue()), 0, 0, 0);
+	--tprint(NadesData, 1);
+	shouldUpdateList = true;
+end
+
+local function delete_nade()
+	if not editorNade then return; end
+	
+	selectedSpot = { false, nil, nil, nil };
+	local tNade = guiNadeSelector:GetValue() + 1;
+	if tNade == 1 then
+		table.remove(NadesData, editorNade);
+	else
+		table.remove(NadesData[editorNade][6], tNade);
+		table.remove(NadesData[editorNade][7], tNade);
+	end
+	shouldUpdateList = true;
+end
+
+local function nade_dump()
+	tprint(NadesData[editorNade], 1);
+end
+
+local function save_nades()
+	local filePath = "Locations\\"..engine.GetMapName();
+	if guiHelperRageMode:GetValue() then
+		filePath = filePath .. "_rage";
+	else
+		filePath = filePath .. "_legit";
+	end
+	
+	local hFile = ffi.cast("void*", ffi.C.CreateFileA(filePath, 0x40000000, 3, 0, 2, 128, nil))
+	if hFile then
+		print("[Info] File successfully created!");
+		for i = 1, #NadesData do
+			for y = 1, #NadesData[i][7] do
+				local str = NadesData[i][1] .. ";" .. NadesData[i][2] .. ";" .. NadesData[i][3] .. ";" .. NadesData[i][5] .. ";" .. NadesData[i][6][y] .. ";" .. NadesData[i][7][y][1]
+				.. ";" .. NadesData[i][7][y][2] .. ";" .. NadesData[i][7][y][3] .. ";" .. NadesData[i][7][y][4] .. ";" .. NadesData[i][7][y][5] .. ";" .. NadesData[i][7][y][6] .. ";" .. NadesData[i][7][y][7]
+				.. ";" .. NadesData[i][7][y][8] .. ";" .. NadesData[i][7][y][9] .. "\n";
+				ffi.C.WriteFile(hFile, ffi.cast("char*", str), string.len(str), nil, nil);
+			end
+		end
+		print("[Info] File successfully saved!");
+		ffi.C.CloseHandle(hFile);
+	else
+		print("[Error] Couldnt create/overwrite file!");
+	end
+end
+
+local function addit_gui()
+	local teleButton = gui.Button(guiEditorBlock, "Teleport", teleport_to_nade); teleButton:SetWidth(260); teleButton:SetHeight(23);
+	local locButton = gui.Button(guiEditorBlock, "Set Location", set_nade_location); locButton:SetWidth(260); locButton:SetHeight(23);
+	local viewButton = gui.Button(guiEditorBlock, "Set View", set_nade_view); viewButton:SetWidth(260); viewButton:SetHeight(23);
+	local deleteButton = gui.Button(guiEditorBlock, "Delete", delete_nade); deleteButton:SetWidth(260); deleteButton:SetHeight(23);
+	local dumpButton = gui.Button(guiEditorBlock, "Dump", nade_dump); dumpButton:SetWidth(260); dumpButton:SetHeight(23);
+	local saveButton = gui.Button(guiEditorBlock, "Save (REWRITING UR DATA)", save_nades); saveButton:SetWidth(260); saveButton:SetHeight(23);
+	guiTicksSlider = gui.Slider(guiEditorBlock, "nade_mticks", "Ticks", 0, 0, 258, 1);
+	guiMoveSpeed = gui.Slider(guiEditorBlock, "nade_mspeed", "Move Speed", 0, 0, 450, 1);
+	guiMoveDegrees = gui.Slider(guiEditorBlock, "nade_mdegree", "Move Degrees", 0, -180, 180, 0.1);
+	
+	gui.Text(guiEditorBlock, "-------------------Nade Creator-------------------");
+	guiNadeText = gui.Editbox(guiEditorBlock, "nade_name", "Name");
+	guiNadeType = gui.Combobox(guiEditorBlock, "nade_type", "Nade Type", "Molotov", "Smoke", "HE");
+	guiShouldRun = gui.Checkbox(guiEditorBlock , "nade_srun", "Should Run", 0);
+	guiShouldJump = gui.Checkbox(guiEditorBlock , "nade_sjump", "Should Jump", 0);
+	guiShouldDuck  = gui.Checkbox(guiEditorBlock , "nade_sduck", "Should Duck", 0);
+	guiVisDistance = gui.Slider(guiEditorBlock, "nade_vdist", "View Distance", 250, 0, 1000, 50);
+	local createButton = gui.Button(guiEditorBlock, "Create", create_new_nade); createButton:SetWidth(260); createButton:SetHeight(23);
+end
+
+addit_gui();
+callbacks.Register("Draw", nade_creator_handler);
